@@ -1,0 +1,160 @@
+<script>
+        const API_URL = 'http://127.0.0.1:3000/api/students';
+
+        // --- Helper Function to calculate 'time ago' ---
+        function timeAgo(date) {
+            const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+            let interval = seconds / 31536000;
+            if (interval > 1) return Math.floor(interval) + " year(s) ago";
+            interval = seconds / 2592000;
+            if (interval > 1) return Math.floor(interval) + " month(s) ago";
+            interval = seconds / 86400;
+            if (interval > 1) return Math.floor(interval) + " day(s) ago";
+            interval = seconds / 3600;
+            if (interval > 1) return Math.floor(interval) + " hour(s) ago";
+            interval = seconds / 60;
+            if (interval > 1) return Math.floor(interval) + " minute(s) ago";
+            return Math.floor(seconds) + " seconds ago";
+        }
+
+        // --- Helper Function to render student lists ---
+        function renderStudentList(containerId, students) {
+            const container = document.querySelector(containerId);
+            container.innerHTML = ''; // Clear static content
+
+            if (students.length === 0) {
+                container.innerHTML = '<p style="padding: 20px; text-align: center;">No students found.</p>';
+                return;
+            }
+
+            students.forEach(student => {
+                const isApprovalList = containerId.includes('approvals');
+                
+                // Determine placement/status badge
+                let statusBadge = `<span class="info-badge">GPA: ${student.gpa}</span>`;
+                if (student.status === 'placed') {
+                    statusBadge += `<span class="info-badge">✓ Placed at ${student.placedAt}</span>`;
+                } else if (student.status === 'approved') {
+                    statusBadge += `<span class="info-badge">Active</span>`;
+                } else {
+                    statusBadge += `<span class="info-badge">Applied: ${timeAgo(student.appliedDate)}</span>`;
+                }
+
+                // Determine buttons
+                const buttons = isApprovalList
+                    ? `
+                        <button class="btn btn-success btn-small" onclick="approveStudent('${student.studentId}')">✓ Approve</button>
+                        <button class="btn btn-warning btn-small" onclick="viewProfile('${student.studentId}')">👁 View</button>
+                    `
+                    : `
+                        <button class="btn btn-small" onclick="editProfile('${student.studentId}')">✏ Edit</button>
+                        <button class="btn btn-warning btn-small" onclick="viewProfile('${student.studentId}')">👁 View</button>
+                    `;
+
+                const studentItem = `
+                    <div class="student-item">
+                        <div class="student-info">
+                            <h4>${student.name}</h4>
+                            <p>
+                                <span class="info-badge">${student.studentId}</span>
+                                ${statusBadge}
+                            </p>
+                        </div>
+                        <div class="student-actions">
+                            ${buttons}
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', studentItem);
+            });
+        }
+
+        // --- Main Function to Load All Dashboard Data ---
+        async function loadDashboard() {
+            try {
+                // 1. Fetch KPI Data
+                const kpiRes = await fetch(`${API_URL}/dashboard-data`);
+                const kpiData = await kpiRes.json();
+
+                // Update KPI cards (using querySelector for simplicity)
+                document.querySelector('.kpi-section .kpi-card:nth-child(1) .kpi-value').textContent = kpiData.totalPlaced;
+                document.querySelector('.kpi-section .kpi-card:nth-child(2) .kpi-value').textContent = kpiData.pendingApprovals;
+                document.querySelector('.kpi-section .kpi-card:nth-child(3) .kpi-value').textContent = kpiData.activeStudents;
+                document.querySelector('.kpi-section .kpi-card:nth-child(4) .kpi-value').textContent = kpiData.placementRate;
+
+                // 2. Fetch Pending Approvals List
+                const pendingRes = await fetch(`${API_URL}?status=pending`);
+                const pendingStudents = await pendingRes.json();
+                renderStudentList('.approvals-section .student-list', pendingStudents);
+
+                // 3. Fetch Student Profiles List
+                const profilesRes = await fetch(`${API_URL}?status=approved,placed`);
+                const profileStudents = await profilesRes.json();
+                renderStudentList('.profiles-section .student-list', profileStudents);
+                
+                // Add animations
+                document.querySelectorAll('.kpi-card, .card').forEach((el, index) => {
+                    el.style.animationDelay = `${index * 100}ms`;
+                    el.classList.add('animate-in');
+                });
+
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+                alert('Could not connect to the backend. Is the server running?');
+            }
+        }
+
+        // --- OnClick Functions ---
+        async function approveStudent(studentId) {
+            if (!confirm(`Are you sure you want to approve student ${studentId}?`)) return;
+
+            try {
+                const res = await fetch(`${API_URL}/${studentId}/approve`, {
+                    method: 'PATCH',
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    alert('Student approved successfully!');
+                    loadDashboard(); // Refresh the entire dashboard
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                console.error('Approval failed:', error);
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function viewProfile(studentId) {
+            try {
+                const res = await fetch(`${API_URL}/${studentId}`);
+                const student = await res.json();
+                
+                if (res.ok) {
+                    // Simple alert. You could build a modal pop-up for this.
+                    alert(JSON.stringify(student, null, 2));
+                } else {
+                    throw new Error(student.message);
+                }
+            } catch (error) {
+                console.error('Failed to view profile:', error);
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        function editProfile(studentId) {
+            alert(`Edit functionality for ${studentId} is not yet implemented.`);
+        }
+
+        function downloadReport(type) {
+            alert(`Report download for ${type} is not yet implemented.`);
+        }
+
+        // --- Load data when the page opens ---
+        document.addEventListener('DOMContentLoaded', loadDashboard);
+
+    </script>
+
+</body>
+</html>
